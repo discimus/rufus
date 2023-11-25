@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rufus</title>
+    <link rel="shortcut icon" href="/assets/dogo-argentino-pink-32px.png" type="image/x-icon">
+    <script defer src="src/alpine-js/cdn.min.js"></script>
+    <style>
+        .flex {display: flex;}
+        .flex-col {flex-flow: column wrap;}
+        .flex-row {flex-flow: row wrap;}
+
+        .justify-center {justify-content: center;}
+        .items-baseline {align-items: baseline;}
+        .items-center {align-items: center;}
+
+        .gap-3 {gap: 3px;}
+        .gap-6 {gap: 6px;}
+        .gap-9 {gap: 9px;}
+        .gap-12 {gap: 12px;}
+
+        .p-3 {padding: 3px;}
+        .p-6 {padding: 6px;}
+        .p-9 {padding: 9px;}
+        .p-12 {padding: 12px;}
+
+        .px-3 {padding-left: 3px; padding-right: 3px;}
+        .px-6 {padding-left: 6px; padding-right: 6px;}
+        .px-9 {padding-left: 9px; padding-right: 9px;}
+        .px-12 {padding-left: 12px; padding-right: 12px;}
+
+        .rounded-3 {border-radius: 3px;}
+        .rounded-6 {border-radius: 6px;}
+        .rounded-9 {border-radius: 9px;}
+        .rounded-12 {border-radius: 12px;}
+
+        .border-red {border: 1px solid red;}
+        .border-yellow {border: 1px solid yellow;}
+        .border-orange {border: 1px solid orange;}
+        .border-green {border: 1px solid green;}
+
+        .text-right {text-align: right;}
+
+        .container {max-width: 900px; margin: auto;}
+        .dinamic-table-container {max-height: 60vh; overflow-y: scroll;}
+
+        th {padding-left: 6px; padding-right: 6px;}
+        td {padding-left: 6px; padding-right: 6px;}
+    </style>
+</head>
+<body>
+    <div class="flex flex-col gap-6 container" x-data="appContext">
+        <div class="flex flex-row gap-6">
+            <div class="flex flex-col justify-center">
+                <img src="assets/dogo-argentino-pink-32px.png" alt="">
+            </div>
+            <h1>Rufus</h1>
+        </div>
+        <div class="flex flex-row gap-6">
+            <span class="p-3 rounded-3 border-orange" x-html="notificationState"></span>
+        </div>
+        <hr>
+        <div class="flex flex-row gap-6 items-center">
+            <!-- <span>Notify me every</span>
+            <select x-model="intervalBetweenNotifications">
+                <option value="1">1</option>
+                <option value="3">3</option>
+                <option value="5">5</option>
+                <option value="8">8</option>
+            </select>
+            <span>minutes</span> -->
+            <select x-model="symbol" x-init="$watch('symbol', t => { prices = []; global.resetVariables(t, prices) })">
+                <option value="USDTBRL">USDTBRL</option>
+                <option value="BTCBRL">BTCBRL</option>
+            </select>
+        </div>
+        <div class="flex flex-row gap-6">
+            <button @click="enableNotifications">
+                <span>Enable notifications</span>
+            </button>
+            <button @click="showPeriodicNotification">
+                <span>Notify me now</span>
+            </button>
+            <button @click="downloadCurrentHistoricalData">
+                <span>Download current historical data</span>
+            </button>
+        </div>
+        <div class="dinamic-table-container">
+            <table border="1" width="100%">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Instante</th>
+                        <th>Valor</th>
+                        <th>Média</th>
+                        <th>Desvio</th>
+                        <th>Label</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="ticker in prices">
+                        <tr>
+                            <td x-html="ticker.symbol"></td>
+                            <td x-html="ticker.instant"></td>
+                            <td class="text-right" x-html="ticker.price"></td>
+                            <td class="text-right" x-html="Number(ticker.avarage).toFixed(3)"></td>
+                            <td class="text-right" x-html="ticker.deviation"></td>
+                            <td x-html="ticker.appreciationTrendLabel"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const global = {
+            prices: [],
+            last: null,
+            first: null,
+            max: null,
+            min: null,
+            symbol: 'USDTBRL',
+            
+            resetVariables(symbol, prices) {
+                this.prices = prices
+                this.last = null
+                this.first = null
+                this.max = null
+                this.min = null
+                this.symbol = symbol
+            },
+            bootstrap() {
+                const SEGUNDO = 1000
+                const MINUTO = 60
+        
+                setInterval(() => {
+                    global.verifyTickerQuotation(this.symbol)
+                }, 3*SEGUNDO)
+        
+                setInterval(() => {
+                    global.notifyPeriodicReport()
+                }, 5*MINUTO*SEGUNDO)
+            },
+            getCurrentNotificationState() {
+                return `Status atual de notificações: <b>${Notification.permission}<b/>`
+            },
+            download(data, filename, type) {
+                var file = new Blob([data], {type: type});
+                if (window.navigator.msSaveOrOpenBlob) // IE10+
+                    window.navigator.msSaveOrOpenBlob(file, filename);
+                else { // Others
+                    var a = document.createElement("a"), url = URL.createObjectURL(file);
+        
+                    a.href = url;
+                    a.download = filename;
+        
+                    document.body.appendChild(a);
+        
+                    a.click();
+        
+                    setTimeout(function() {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);  
+                    }, 0); 
+                }
+            },
+
+            async notifyPeriodicReport() {
+                if (global.last != null) {
+                    const now = new Date()
+        
+                    /*
+                    const message = `Ticker '${global.last.symbol}'; Agora R$ ${global.last.price}; Max R$ ${global.max.price}; Min R$ ${global.min.price}; Tendência ${global.last.appreciationTrendLabel}; Desvio R$ ${global.last.deviation}; Início ${global.first.instant}.`
+                    */
+
+                    const message = `R$ ${global.last.price}\nMAX R$ ${global.max.price} MIN R$ ${global.min.price}\nAVG R$ ${global.last.avarage} DEV R$ ${global.last.deviation}`
+
+                    const params = {
+                        body: message
+                    }
+        
+                    const notification = new Notification(`Periodic Report [${global.last.symbol}] [${global.last.appreciationTrendLabel}]`, params)
+                }
+            },
+            async verifyTickerQuotation(symbol = 'USDTBRL') {
+                const now = new Date()
+        
+                const price = await fetch('https://api1.binance.com/api/v3/ticker/price?symbol='+symbol.toUpperCase())
+                    .then(t => t.json())
+                    .then(t => Number(t.price))
+        
+                const avarage = global.prices.length > 0 ? 
+                    global.prices.reduce((acc, t) => t.price+acc, 0) / global.prices.length :
+                    price
+        
+                const deviation = Number(Number(price - avarage).toFixed(4))
+        
+                const appreciationTrendLabel = price > avarage ?
+                    'VALORIZAÇÃO' :
+                    (price == avarage ?
+                    'ESTÁVEL' :
+                    'DESVALORIZACAO')
+        
+                const ticker = {
+                    symbol,
+                    price,
+                    avarage,
+                    deviation,
+                    /*
+                    instant: now.toISOString(),
+                    */
+                    instant: now.toLocaleString('pt-BR'),
+                    appreciationTrendLabel
+                }
+        
+                if (global.max == null || ticker.price > global.max.price) {
+                    global.max = ticker
+                }
+        
+                if (global.min == null || ticker.price < global.min.price) {
+                    global.min = ticker
+                }
+        
+                if (global.prices.length == 0) {
+                    global.first = ticker
+                }
+        
+                global.last = ticker
+                global.prices.unshift(ticker)
+        
+                console.log(ticker);
+            }
+        }
+    </script>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('appContext', () => ({
+                intervalBetweenNotifications: 5,
+                notificationState: '',
+                prices: [],
+                symbol: '',
+
+                init() {
+                    global.prices = this.prices
+                    this.notificationState = global.getCurrentNotificationState()
+                    
+                    global.bootstrap()
+                },
+
+                enableNotifications() {
+                    if (Notification.permission == 'default') {
+                        Notification.requestPermission(permission => {
+                            if (permission == 'granted') {
+                                this.notificationState = global.getCurrentNotificationState()
+                            }
+                        })
+                    }
+
+                    if (Notification.permission == 'granted') {
+                        alert('Notificações já estão ativas')
+                    }
+                },
+                showPeriodicNotification() {
+                    global.notifyPeriodicReport()
+                },
+                downloadCurrentHistoricalData() {
+                    const now = new Date()
+                    global.download(JSON.stringify(global.prices), `rufus-report-${now.toISOString()}.json`, 'application/json')
+                }
+            }))
+        })
+    </script>
+</body>
+</html>
